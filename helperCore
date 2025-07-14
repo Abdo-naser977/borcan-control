@@ -1,0 +1,1588 @@
+var current_href = location.href, invoiceList = [], receiptList = [], codeList = [];
+
+setInterval(function () {
+    if (current_href !== location.href) {
+        current_href = location.href;
+        loadExtension();
+    }
+}, 500);
+
+window.addEventListener('load', (event) => {
+    const loaderId = setInterval(async () => {
+        var container = $(".eta-layout-content").find("div[role='tablist']")[0];
+        if (container == undefined)
+            return;
+        clearInterval(loaderId);
+        loadExtension();
+    }, 50);
+});
+
+var oldXHR = window.XMLHttpRequest;
+var responseTotalCount = 0, currentUrl = "", isDownloading = false, isCancellationRequested = false;
+function newXHR() {
+    var realXHR = new oldXHR();
+    realXHR.addEventListener("readystatechange", function () {
+        if (realXHR.readyState == 4 && realXHR.status == 200) {
+            var invoicesUri = "https://api-portal.invoicing.eta.gov.eg/api/v1/documents";
+            var receiptsUri = "https://api-portal.invoicing.eta.gov.eg/api/v1/receipts";
+            var codesUri = "https://api-portal.invoicing.eta.gov.eg/api/v1/codetypes/codes/my";
+            if (realXHR.status == 200 && (realXHR.responseURL.match(`^${invoicesUri}/recent`) || realXHR.responseURL.match(`^${invoicesUri}/search`))) {
+                if (!isDownloading) {
+                    currentUrl = realXHR.responseURL;
+                    var response = JSON.parse(realXHR.responseText);
+                    responseTotalCount = response.metadata.totalCount;
+                    invoiceList = response.result;
+                }
+            }
+            if (realXHR.status == 200 && (realXHR.responseURL.match(`^${receiptsUri}/recent`) || realXHR.responseURL.match(`^${receiptsUri}/search`))) {
+                if (!isDownloading) {
+                    currentUrl = realXHR.responseURL;
+                    var response = JSON.parse(realXHR.responseText);
+                    responseTotalCount = response.metadata.totalCount;
+                    receiptList = response.receipts;
+                }
+            }
+            if (realXHR.status == 200 && (realXHR.responseURL.match(`^${codesUri}`))) {
+                currentUrl = realXHR.responseURL;
+                var response = JSON.parse(realXHR.responseText);
+                responseTotalCount = response.metadata.totalCount;
+                codeList = response.result;
+            }
+
+        }
+    }, false);
+    return realXHR;
+}
+window.XMLHttpRequest = newXHR;
+
+function loadExtension() {
+
+    var popup = `
+    <div class="modal fade" id="downloadModal" data-backdrop="static" tabindex="-1" aria-labelledby="downloadModalLabel" aria-hidden="true">
+      <div class="modal-dialog" style="width:300px;">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title fs-5 bold text-center w-100" id="downloadModalLabel">إختيارات إسم ملف الفاتورة</h5>
+          </div>
+          <div class="modal-body">
+
+            <ul class="nav nav-tabs justify-content-end" dir="ltr" id="myTab" role="tablist">
+                <li class="nav-item">
+                  <a class="nav-link " id="about-tab" data-toggle="tab" href="#extesnion-about" role="tab" aria-controls="extesnion-about" aria-selected="false">توضيح</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link active" id="options-tab" data-toggle="tab" href="#extension-options" role="tab" aria-controls="extension-options" aria-selected="true">إختيارات</a>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="myTabContent">
+              <div class="tab-pane fade" id="extesnion-about" role="tabpanel" aria-labelledby="about-tab">
+                    <p class="text-right" style="margin-top:10px;">
+                        تم تصميم هذه الأداة وتطويرها مجاناً بواسطة عبدالرحمن ناصر بأستخدام AI
+                        ✔️ للتواصل 01023442351
+                    </p>
+
+                    
+                    <p class="text-right" style="margin-top:10px;">
+                        🔐 ليس لدينا اي صلاحيه للوصول الي بيانات المستخدم الخاصه بك
+                    </p>
+              </div>
+
+              <div class="tab-pane fade show active" id="extension-options" role="tabpanel" aria-labelledby="options-tab">
+                    <div id="optionCheckboxes" style="margin-top:10px;">
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" checked="" id="option-date">
+                            <label class="form-check-label text-right" for="option-date">إضافة تاريخ الفاتورة</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" checked="" id="option-id">
+                            <label class="form-check-label text-right" for="option-id">إضافة الرقم الداخلى</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" checked="" id="option-seller-id">
+                            <label dir="rtl" class="form-check-label text-right" for="option-seller-id">إضافة الرقم الضريبى للبائع</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" checked="" id="option-seller-name">
+                            <label dir="rtl" class="form-check-label text-right" for="option-seller-name">إضافة إسم البائع</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" checked="" id="option-buyer-id">
+                            <label dir="rtl" class="form-check-label text-right" for="option-buyer-id">إضافة الرقم الضريبى للمشترى</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" checked="" id="option-buyer-name">
+                            <label dir="rtl" class="form-check-label text-right" for="option-buyer-name">إضافة إسم المشترى</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" checked="" id="option-uuid">
+                            <label class="form-check-label text-right" for="option-uuid">إضافة الرقم الإلكترونى</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" checked="" id="option-type">
+                            <label class="form-check-label text-right" for="option-type">إضافة نوع المستند</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" id="option-separate-seller">
+                            <label class="form-check-label text-right" for="option-separate-seller">مجلد لكل بائع</label>
+                          </div>
+                          <div class="form-check text-right invoiceDownloadOption">
+                            <input class="form-check-input" type="checkbox" id="option-separate-buyer">
+                            <label class="form-check-label text-right" for="option-separate-buyer">مجلد لكل مشترى</label>
+                          </div>
+                          <br>
+                          <div class="form-check text-right receiptDownloadOption">
+                            <input class="form-check-input" type="checkbox" id="option-download-details">
+                            <label class="form-check-label text-right bold" for="option-download-details">تحميل بيانات الإيصال - وقت تحميل أطول</label>
+                          </div>
+                          <br>
+                          <div class="form-check text-right">
+                            <input class="form-check-input" type="checkbox" id="option-combine-all">
+                            <label class="form-check-label text-right bold" for="option-combine-all">Excel - تجميع الأصناف فى صفحة واحدة</label>
+                          </div>
+                          <br>
+                          <div class="form-check text-right">
+                            <input class="form-check-input" type="checkbox" id="option-download-all">
+                            <label class="form-check-label text-right bold" for="option-download-all">تحميل جميع الصفحات -  <span id="modalTotalCountText"></span> <span id="docProfileText"></span></label>
+                          </div>
+                      </div>
+              </div>
+          </div>
+         </div>
+
+            
+          <div class="modal-footer" dir="ltr">
+            <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-secondary" id="submitDownloadJson">JSON/XML</button>
+            <button type="button" class="btn btn-success" id="submitDownloadExcel">Excel</button>
+            <button type="button" class="btn btn-primary" id="submitDownloadInvoices">PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+    if (!$("#downloadModal").length) {
+        $("body").append(popup);
+
+        $("#submitDownloadInvoices").click(() => {
+            var options = getOptions();
+            if (options.downloadAll) {
+                downloadAllPages().then((list) => { downloadAllInvoices(list, true); });
+            } else {
+                downloadAllInvoices(invoiceList, true);
+            }
+
+        });
+        $("#submitDownloadJson").click(() => {
+            var options = getOptions();
+            if (location.href === "https://invoicing.eta.gov.eg/documents") {
+                if (options.downloadAll) {
+                    downloadAllPages().then((list) => { downloadAllInvoices(list, false); });
+                } else {
+                    downloadAllInvoices(invoiceList, false);
+                }
+            }
+            else if (location.href === "https://invoicing.eta.gov.eg/receipts") {
+                if (options.downloadAll) {
+                    downloadAllReceiptPages().then((list) => { downloadJsonForReceipts(list); });
+                } else {
+                    downloadJsonForReceipts(receiptList);
+                }
+            }
+        });
+        $("#submitDownloadExcel").click(() => {
+            var options = getOptions();
+            if (location.href === "https://invoicing.eta.gov.eg/documents") {
+                if (options.downloadAll) {
+                    downloadAllPages().then((list) => { downloadExcelSummary(list); });
+                } else {
+                    downloadExcelSummary(invoiceList);
+                }
+            }
+            else if (location.href === "https://invoicing.eta.gov.eg/receipts") {
+                if (options.downloadAll) {
+                    downloadAllReceiptPages().then((list) => {
+                        if (options.downloadDetails) downloadExcelForReceipts(list);
+                        else downloadExcelForReceiptsNoDetails(list);
+                    });
+                } else {
+                    if (options.downloadDetails) downloadExcelForReceipts(receiptList);
+                    else downloadExcelForReceiptsNoDetails(receiptList);
+                }
+            }
+        });
+        $("#optionCheckboxes input.form-check-input").on("change", (e) => {
+            if (e.target.id === 'option-separate-seller' && $("#option-separate-seller").is(':checked'))
+                $("#option-separate-buyer").prop("checked", false);
+
+            if (e.target.id === 'option-separate-buyer' && $("#option-separate-buyer").is(':checked'))
+                $("#option-separate-seller").prop("checked", false);
+
+            getOptions();
+        });
+    }
+    try {
+        var container = $(".eta-layout-content").find("div[role='tablist']")[0];
+
+        if (location.href === "https://invoicing.eta.gov.eg/documents") {
+            var ico = $('.layout-content-header-title i[data-icon-name="Documentation"]').clone();
+            var btn = $(`<button type="button" class="ms-Button ms-Pivot-link downloadAllBtn">
+            <span><span><span class="ms-Pivot-icon">${ico[0].outerHTML}</span>
+            <span class="downloadAllBtnText">Download All</span>
+            </span></span></button>`);
+
+            var cancelBtn = $(`<button type="button" id="cancelDownloadBtn" style="display:none;" class="ms-Button ms-Pivot-link"><span>Stop</span></button>`);
+
+            $(container).append(btn);
+            $(container).append(cancelBtn);
+
+            $(btn).click(() => {
+                if ($(btn).hasClass("disabled"))
+                    return false;
+
+                $('#downloadModal').modal('show');
+                $("#modalTotalCountText").text(responseTotalCount);
+                $("#docProfileText").text("فاتورة");
+                $("#submitDownloadInvoices").show();
+                $(".invoiceDownloadOption").show();
+                $(".receiptDownloadOption").hide();
+                loadOptions();
+            });
+
+            $(cancelBtn).click(() => {
+                isCancellationRequested = true;
+                $(cancelBtn).hide();
+            });
+        }
+        else if (location.href === "https://invoicing.eta.gov.eg/receipts") {
+            container = $(".subPivot[role='toolbar']").find("div[role='tablist']")[0];
+            var ico = $('.layout-content-header-title i[data-icon-name="Documentation"]').clone();
+            var btn = $(`<button type="button" class="ms-Button ms-Pivot-link downloadAllBtn">
+            <span><span><span class="ms-Pivot-icon">${ico[0].outerHTML}</span>
+            <span class="downloadAllBtnText">Download All</span>
+            </span></span></button>`);
+
+            var cancelBtn = $(`<button type="button" id="cancelDownloadBtn" style="display:none;" class="ms-Button ms-Pivot-link"><span>Stop</span></button>`);
+
+            $(container).append(btn);
+            $(container).append(cancelBtn);
+
+            $(btn).click(() => {
+                if ($(btn).hasClass("disabled"))
+                    return false;
+
+                $('#downloadModal').modal('show');
+                $("#modalTotalCountText").text(responseTotalCount);
+                $("#docProfileText").text("إيصال");
+                $("#submitDownloadInvoices").hide();
+                $(".invoiceDownloadOption").hide();
+                $(".receiptDownloadOption").show();
+                loadOptions();
+            });
+
+            $(cancelBtn).click(() => {
+                isCancellationRequested = true;
+                $(cancelBtn).hide();
+            });
+        }
+        else if (location.href === "https://invoicing.eta.gov.eg/codeusages") {
+            var ico = $('.layout-content-header-title i[data-icon-name="GenericScan"]').clone();
+            var btn = $(`<button type="button" class="ms-Button ms-Pivot-link downloadAllBtn" style="background-color: transparent;">
+            <span><span><span class="ms-Pivot-icon">${ico[0].outerHTML}</span>
+            <span class="downloadAllBtnText">Download All</span>
+            </span></span></button>`);
+
+            $(container).append(btn);
+
+            $(btn).click(() => {
+                if ($(btn).hasClass("disabled"))
+                    return false;
+
+                downloadAllCodes().then((paramList) => {
+                    var count = 0, totalCount = paramList.length;
+                    if (totalCount > 0) {
+                        $(btn).addClass("disabled");
+
+                        const workbook = new ExcelJS.Workbook();
+                        const worksheet = workbook.addWorksheet("الأكواد");
+
+                        worksheet.views = [
+                            { rightToLeft: true, rtl: true, activeCell: 'A1' }
+                        ];
+
+                        var columns = [
+                            { header: 'نوع الكود', key: 'codeTypeNamePrimaryLang', width: 10 },
+                            { header: 'رقم مميز', key: 'codeLookupValue', width: 17 },
+                            { header: 'اسم الكود', key: 'codeNameSecondaryLang', width: 30 },
+                            { header: 'اسم الكود بالانجليزية', key: 'codeNamePrimaryLang', width: 30 },
+                            { header: 'نشط', key: 'active', width: 8 },
+                            { header: 'نشط من', key: 'activeFrom', width: 12 },
+                            { header: 'نشط إلى', key: 'activeTo', width: 12 }
+                        ];
+
+                        worksheet.columns = columns;
+                        var rows = [];
+
+                        for (var i in paramList) {
+                            var e = paramList[i];
+                            var row = {
+                                codeTypeNamePrimaryLang: e.codeTypeNamePrimaryLang,
+                                codeLookupValue: e.codeLookupValue,
+                                codeNameSecondaryLang: e.codeNameSecondaryLang,
+                                codeNamePrimaryLang: e.codeNamePrimaryLang,
+                                active: e.active ? "نعم" : "لا",
+                                activeFrom: new Date(e.activeFrom),
+                                activeTo: e.activeTo == undefined ? "" : new Date(e.activeTo),
+                            };
+                            rows.push(row);
+                        }
+
+                        worksheet.addRows(rows);
+
+                        worksheet.autoFilter = {
+                            from: 'A1',
+                            to: {
+                                row: rows.length + 1,
+                                column: columns.length
+                            }
+                        }
+
+                        workbook.xlsx.writeBuffer().then(function (data) {
+                            var xlBlob = new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                            saveAs(xlBlob, "Codes.xlsx");
+                            $(".downloadAllBtnText").html("Download All");
+                            $(btn).removeClass("disabled");
+                            isDownloading = false;
+                        });
+                    }
+                });
+            });
+
+        }
+    } catch (e) {
+        console.log(e);
+    }
+}
+
+function getOptions() {
+    var options = {
+        type: $("#option-type").is(':checked'),
+        date: $("#option-date").is(':checked'),
+        uuid: $("#option-uuid").is(':checked'),
+        id: $("#option-id").is(':checked'),
+        seller_id: $("#option-seller-id").is(':checked'),
+        seller_name: $("#option-seller-name").is(':checked'),
+        buyer_id: $("#option-buyer-id").is(':checked'),
+        buyer_name: $("#option-buyer-name").is(':checked'),
+        separate_seller: $("#option-separate-seller").is(':checked'),
+        separate_buyer: $("#option-separate-buyer").is(':checked'),
+        downloadAll: $("#option-download-all").is(':checked'),
+        combineAll: $("#option-combine-all").is(':checked'),
+        downloadDetails: $("#option-download-details").is(':checked'),
+    }
+    localStorage.setItem("extensionOptions", JSON.stringify(options));
+    return options;
+}
+
+function loadOptions() {
+    var options = localStorage.getItem("extensionOptions");
+    if (options != undefined) {
+        options = JSON.parse(options);
+        $("#option-type").attr("checked", options.type);
+        $("#option-date").attr("checked", options.date);
+        $("#option-uuid").attr("checked", options.uuid);
+        $("#option-id").attr("checked", options.id);
+        $("#option-seller-id").attr("checked", options.seller_id);
+        $("#option-seller-name").attr("checked", options.seller_name);
+        $("#option-buyer-id").attr("checked", options.buyer_id);
+        $("#option-buyer-name").attr("checked", options.buyer_name);
+        $("#option-separate-seller").attr("checked", options.separate_seller);
+        $("#option-separate-buyer").attr("checked", options.separate_buyer);
+        $("#option-download-all").attr("checked", options.downloadAll);
+        $("#option-combine-all").attr("checked", options.combineAll);
+        $("#option-download-details").attr("checked", options.downloadDetails);
+    } else {
+        getOptions();
+    }
+}
+
+async function downloadExcelSummary(paramList) {
+    try {
+        $('#downloadModal').modal('hide');
+        var count = 0, totalCount = paramList.length;
+        if (totalCount > 0) {
+            var btn = $(".downloadAllBtn");
+            $(btn).addClass("disabled");
+            $("#cancelDownloadBtn").show();
+            var sortedList = [];
+
+            for (var invIndex = 0; invIndex <= paramList.length; invIndex++) {
+                if (isCancellationRequested || invIndex == paramList.length) {
+                    $(".downloadAllBtnText").html("Download All");
+                    $(btn).removeClass("disabled");
+
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet("جميع الفواتير");
+
+                    worksheet.views = [
+                        { rightToLeft: true, rtl: true, activeCell: 'A1', state: "frozen", ySplit: 1 }
+                    ];
+
+                    var columns = [
+                        { header: 'مسلسل', key: 'index', width: 10 },
+                        { header: 'تفاصيل', key: 'details', width: 10, style: { font: { name: 'Comic Sans MS', family: 4, size: 12, underline: true, bold: true } } },
+                        { header: 'نوع المستند', key: 'type', width: 12 },
+                        { header: 'نسخة المستند', key: 'version', width: 13 },
+                        { header: 'الحالة', key: 'status', width: 10 },
+                        { header: 'تاريخ الإصدار', key: 'dateIssued', width: 13 },
+                        { header: 'تاريخ التقديم', key: 'dateReceived', width: 13 },
+                        { header: 'عملة الفاتورة', key: 'currency', width: 13 },
+                        { header: 'قيمة الفاتورة', key: 'netAmount', width: 12 },
+                        { header: 'إجمالى الفاتورة', key: 'totalAmount', width: 14 },
+                        { header: 'الرقم الداخلى', key: 'invoiceNumber', width: 23 },
+                        { header: 'الرقم الإلكترونى', key: 'uuid', width: 32 },
+                        { header: 'الرقم الضريبى للبائع', key: 'issuerId', width: 17 },
+                        { header: 'إسم البائع', key: 'issuerName', width: 32 },
+                        { header: 'عنوان البائع', key: 'issuerAddress', width: 32 },
+                        { header: 'الرقم الضريبى للمشترى', key: 'receiverId', width: 17 },
+                        { header: 'إسم المشترى', key: 'receiverName', width: 32 },
+                        { header: 'عنوان المشترى', key: 'receiverAddress', width: 32 },
+                        { header: 'مرجع طلب الشراء', key: 'purchaseOrderReference', width: 32 },
+                        { header: 'مرجع طلب المبيعات', key: 'salesOrderReference', width: 32 },
+                        { header: 'الرابط الخارجى', key: 'url', width: 120 },
+                    ];
+                    var rows = [], detColumns = [], detRows = [], firstInvoiceLines = [];
+                    var detailsWorksheet, lineIndex = 1, lastLineIndex = 1;
+
+                    detColumns = [
+                        { header: 'كود الصنف', key: 'itemCode', width: 14 },
+                        { header: 'إسم الكود', key: 'itemSecondaryName', width: 14 },
+                        { header: 'الوصف', key: 'description', width: 25 },
+                        { header: 'الكمية', key: 'quantity', width: 10 },
+                        { header: 'السعر', key: 'unitValue', width: 10 },
+                        { header: 'القيمة', key: 'netTotal', width: 10 },
+                        { header: 'الإجمالى', key: 'total', width: 10, totalsRowFunction: 'sum' },
+                    ];
+
+                    if (getOptions().combineAll) {
+                        detColumns = [
+                            { header: 'نوع المستند', key: 'type', width: 12 },
+                            { header: 'نسخة المستند', key: 'version', width: 13 },
+                            { header: 'الحالة', key: 'status', width: 10 },
+                            { header: 'رقم الفاتورة', key: 'invoiceNumber', width: 23 },
+                            { header: 'تاريخ الإصدار', key: 'dateIssued', width: 13 },
+                            { header: 'تاريخ التقديم', key: 'dateReceived', width: 13 },
+                            { header: 'كود الصنف', key: 'itemCode', width: 14 },
+                            { header: 'إسم الكود', key: 'itemSecondaryName', width: 14 },
+                            { header: 'الوصف', key: 'description', width: 25 },
+                            { header: 'الكمية', key: 'quantity', width: 10 },
+                            { header: 'السعر', key: 'unitValue', width: 10 },
+                            { header: 'القيمة', key: 'netTotal', width: 10 },
+                            { header: 'الإجمالى', key: 'total', width: 10 },
+                            { header: 'الرقم الضريبى للبائع', key: 'issuerId', width: 17 },
+                            { header: 'إسم البائع', key: 'issuerName', width: 32 },
+                            { header: 'عنوان البائع', key: 'issuerAddress', width: 32 },
+                            { header: 'الرقم الضريبى للمشترى', key: 'receiverId', width: 17 },
+                            { header: 'إسم المشترى', key: 'receiverName', width: 32 },
+                            { header: 'عنوان المشترى', key: 'receiverAddress', width: 32 },
+                            { header: 'مرجع طلب الشراء', key: 'purchaseOrderReference', width: 32 },
+                            { header: 'مرجع طلب المبيعات', key: 'salesOrderReference', width: 32 },
+                            { header: 'الرقم الإلكترونى', key: 'uuid', width: 32 },
+                        ];
+                        detailsWorksheet = workbook.addWorksheet('بيانات الفواتير');
+                    }
+
+                    $.each(sortedList, (i, doc) => {
+                        if (doc !== undefined) {
+                            var invCurrency = doc.currenciesSold;
+                            if (invCurrency !== "EGP") {
+                                invCurrency = doc.invoiceLines[0].unitValue.currencySold
+                            }
+
+                            var issuerAddress = doc.issuer.address ?? [];
+                            var receiverAddress = doc.receiver.address ?? [];
+
+                            var row = {
+                                index: i + 1,
+                                type: doc.documentTypeNameSecondaryLang,
+                                version: doc.documentTypeVersion,
+                                status: doc.status,
+                                dateIssued: new Date(doc.dateTimeIssued),
+                                dateReceived: new Date(doc.dateTimeRecevied),
+                                currency: invCurrency,
+                                invoiceNumber: doc.internalID,
+                                netAmount: doc.netAmount,
+                                totalAmount: doc.totalAmount,
+                                uuid: doc.uuid,
+                                issuerId: doc.issuer.id,
+                                issuerName: doc.issuer.name,
+                                issuerAddress: `${issuerAddress.buildingNumber} ${issuerAddress.street} ${issuerAddress.regionCity} ${issuerAddress.governate}`,
+                                receiverId: doc.receiver.id,
+                                receiverName: doc.receiver.name,
+                                receiverAddress: `${receiverAddress.buildingNumber} ${receiverAddress.street} ${receiverAddress.regionCity} ${receiverAddress.governate}`,
+                                purchaseOrderReference: doc.purchaseOrderReference,
+                                salesOrderReference: doc.salesOrderReference,
+                                url: { text: doc.publicUrl, hyperlink: doc.publicUrl }
+                            };
+
+                            if (doc.status === "Valid" && doc.cancelRequestDate != null && doc.declineCancelRequestDate == null)
+                                row.status = "Cancellation Requested";
+
+                            if (doc.status === "Valid" && doc.rejectRequestDate != null && doc.declineRejectRequestDate == null)
+                                row.status = "Rejection Requested";
+
+                            $.each(doc.taxTotals, (t, tax) => {
+                                if (getColumnIndex(columns, tax.taxType) == -1) {
+                                    var newTax = getTaxTypeDescription(tax.taxType);
+                                    columns.splice(getColumnIndex(columns, "totalAmount"), 0, { header: newTax.description, key: tax.taxType, width: newTax.width });
+                                }
+                                row[tax.taxType] = tax.amount;
+                            });
+
+                            if (doc.totalItemsDiscountAmount && doc.totalItemsDiscountAmount > 0) {
+                                if (getColumnIndex(columns, "itemsDiscount") == -1) {
+                                    columns.splice(getColumnIndex(columns, "totalAmount"), 0, { header: "خصم الأصناف", key: "itemsDiscount", width: 13 });
+                                }
+                                row["itemsDiscount"] = doc.totalItemsDiscountAmount;
+                            }
+
+                            if (doc.totalDiscount && doc.totalDiscount > 0) {
+                                if (getColumnIndex(columns, "discount") == -1) {
+                                    columns.splice(getColumnIndex(columns, "totalAmount"), 0, { header: "خصم الفاتورة", key: "discount", width: 13 });
+                                }
+                                row["discount"] = doc.totalDiscount;
+                            }
+
+                            if (doc.extraDiscountAmount && doc.extraDiscountAmount > 0) {
+                                if (getColumnIndex(columns, "extraDiscount") == -1) {
+                                    columns.splice(getColumnIndex(columns, "totalAmount"), 0, { header: "خصم إضافى", key: "extraDiscount", width: 13 });
+                                }
+                                row["extraDiscount"] = doc.extraDiscountAmount;
+                            }
+
+                            if (doc.payment && doc.payment.bankAccountIBAN) {
+                                if (getColumnIndex(columns, "bankAccountIBAN") == -1) {
+                                    columns.splice(getColumnIndex(columns, "url"), 0, { header: "IBAN", key: "bankAccountIBAN", width: 13 });
+                                }
+                                row["bankAccountIBAN"] = doc.payment.bankAccountIBAN;
+                            }
+
+                            var indx = i + 1;
+
+                            if (!getOptions().combineAll) {
+                                detRows = [];
+                                detailsWorksheet = workbook.addWorksheet(`${indx}`);
+                            }
+
+                            detailsWorksheet.views = [
+                                { rightToLeft: true, rtl: true, activeCell: 'A1', state: "frozen", ySplit: 1 }
+                            ];
+
+                            if (invCurrency !== "EGP" && getColumnIndex(detColumns, "currencySold") == -1) {
+                                detColumns.splice(getColumnIndex(detColumns, "issuerId"), 0, { header: 'العملة', key: 'currencySold', width: 10 });
+                                detColumns.splice(getColumnIndex(detColumns, "issuerId"), 0, { header: 'سعر العملة', key: 'currencyExchangeRate', width: 12 });
+                                detColumns.splice(getColumnIndex(detColumns, "issuerId"), 0, { header: 'القيمة', key: 'amountSold', width: 10 });
+                                detColumns.splice(getColumnIndex(detColumns, "issuerId"), 0, { header: 'الإجمالى', key: 'totalForeign', width: 10 });
+                            }
+
+                            lastLineIndex = lineIndex + 1;
+                            firstInvoiceLines.push(lastLineIndex);
+                            $.each(doc.invoiceLines, (l, line) => {
+                                lineIndex += 1;
+
+                                var detRow = {
+                                    type: doc.documentTypeNameSecondaryLang,
+                                    version: doc.documentTypeVersion,
+                                    status: doc.status,
+                                    invoiceNumber: doc.internalID,
+                                    dateIssued: new Date(doc.dateTimeIssued),
+                                    dateReceived: new Date(doc.dateTimeRecevied),
+                                    itemCode: line.itemCode,
+                                    itemSecondaryName: line.itemSecondaryName,
+                                    description: line.description,
+                                    quantity: line.quantity,
+                                    unitValue: line.unitValue.amountEGP,
+                                    netTotal: line.netTotal,
+                                    total: line.total,
+                                    issuerId: doc.issuer.id,
+                                    issuerName: doc.issuer.name,
+                                    issuerAddress: `${issuerAddress.buildingNumber} ${issuerAddress.street} ${issuerAddress.regionCity} ${issuerAddress.governate}`,
+                                    receiverId: doc.receiver.id,
+                                    receiverName: doc.receiver.name,
+                                    receiverAddress: `${receiverAddress.buildingNumber} ${receiverAddress.street} ${receiverAddress.regionCity} ${receiverAddress.governate}`,
+                                    purchaseOrderReference: doc.purchaseOrderReference,
+                                    salesOrderReference: doc.salesOrderReference,
+                                    uuid: doc.uuid,
+                                };
+
+                                $.each(line.lineTaxableItems, (t, tax) => {
+                                    if (getColumnIndex(detColumns, tax.taxType) == -1) {
+                                        var newTax = getTaxTypeDescription(tax.taxType);
+                                        detColumns.splice(getColumnIndex(detColumns, "total"), 0, { header: newTax.description, key: tax.taxType, width: newTax.width });
+                                    }
+                                    detRow[tax.taxType] = tax.amount;
+                                });
+
+                                if (line.valueDifference && line.valueDifference > 0) {
+                                    if (getColumnIndex(detColumns, "valueDifference") == -1) {
+                                        detColumns.splice(getColumnIndex(detColumns, "total"), 0, { header: "فرق قيمة لأغراض الضريبة", key: "valueDifference", width: 20 });
+                                    }
+                                    detRow["valueDifference"] = line.valueDifference;
+                                }
+
+                                if (line.discount && line.discount.amount && line.discount.amount > 0) {
+                                    if (getColumnIndex(detColumns, "discount") == -1) {
+                                        detColumns.splice(getColumnIndex(detColumns, "total"), 0, { header: "خصم", key: "discount", width: 10 });
+                                    }
+                                    detRow["discount"] = line.discount.amount;
+                                }
+
+                                if (line.itemsDiscount && line.itemsDiscount > 0) {
+                                    if (getColumnIndex(detColumns, "discount") == -1) {
+                                        detColumns.splice(getColumnIndex(detColumns, "total"), 0, { header: "خصم", key: "discount", width: 10 });
+                                    }
+                                    detRow["discount"] = line.itemsDiscount;
+                                }
+
+                                if (invCurrency !== "EGP") {
+                                    detRow.currencySold = line.unitValue.currencySold;
+                                    detRow.currencyExchangeRate = line.unitValue.currencyExchangeRate;
+                                    detRow.amountSold = line.unitValue.amountSold;
+                                    detRow.totalForeign = line.totalForeign;
+                                }
+
+                                detRows.push(detRow);
+
+                                if (l == doc.invoiceLines.length - 1) {
+                                    if (!getOptions().combineAll) {
+                                        detailsWorksheet.columns = detColumns;
+                                        detailsWorksheet.addRows(detRows);
+                                        detailsWorksheet.addRow({ itemCode: { text: 'عودة', hyperlink: `#\'جميع الفواتير\'!B${indx + 1}` } })
+                                        detailsWorksheet.getCell(`A${doc.invoiceLines.length + 2}`).font = { name: 'Calibri', size: 14, underline: true, bold: true };
+                                    }
+                                }
+                            });
+                            if (getOptions().combineAll) {
+                                row.details = { text: 'عرض', hyperlink: `#\'بيانات الفواتير\'!A${lastLineIndex}` };
+                            } else {
+                                row.details = { text: 'عرض', hyperlink: `#\'${indx}\'!A1` };
+                            }
+
+                            rows.push(row);
+                        }
+                    });
+
+                    worksheet.columns = columns;
+                    worksheet.addRows(rows);
+
+                    if (getOptions().combineAll) {
+                        detailsWorksheet.columns = detColumns;
+                        detailsWorksheet.addRows(detRows);
+                        $.each(firstInvoiceLines, (i, l) => {
+                            detailsWorksheet.getCell(`A${l}`).font = { name: 'Calibri', size: 11, underline: true, bold: true };
+                        })
+                    }
+
+                    worksheet.getCell('B1').font = { name: 'Calibri', size: 11, underline: false, bold: false };
+
+                    worksheet.autoFilter = {
+                        from: 'A1',
+                        to: {
+                            row: rows.length + 1,
+                            column: columns.length - 1
+                        }
+                    }
+                    detailsWorksheet.autoFilter = {
+                        from: 'A1',
+                        to: {
+                            row: detRows.length + 1,
+                            column: detColumns.length - 1
+                        }
+                    }
+                    workbook.xlsx.writeBuffer().then(function (data) {
+                        var xlBlob = new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                        saveAs(xlBlob, "eInvoices.xlsx");
+                        isDownloading = false;
+                        isCancellationRequested = false;
+                        $("#cancelDownloadBtn").hide();
+                    });
+                    invIndex = paramList.length;
+                    return;
+                }
+                var e = paramList[invIndex].source || paramList[invIndex];
+                var inv = await getDocumentDetails(e.uuid);
+
+                $(".downloadAllBtnText").html(`Preparing Row(${count}/${totalCount})`);
+                count++;
+                if (inv !== undefined)
+                    sortedList.push(inv);
+            }
+        }
+    } catch (e) {
+        console.log(e);
+    }
+}
+
+async function downloadAllInvoices(paramList, isPDF) {
+    try {
+        $('#downloadModal').modal('hide');
+        var count = 0, totalCount = paramList.length;
+
+        if (totalCount > 0) {
+            var zip = new JSZip();
+            var zipFilename = "eInvoices.zip";
+            var btn = $(".downloadAllBtn");
+            $(btn).addClass("disabled");
+            $("#cancelDownloadBtn").show();
+            var fileNameList = [];
+
+            for (var invIndex = 0; invIndex <= paramList.length; invIndex++) {
+                if (isCancellationRequested || invIndex == paramList.length) {
+                    zip.generateAsync({ type: 'blob' }).then(function (content) {
+                        $(".downloadAllBtnText").html("Download All");
+                        $(btn).removeClass("disabled");
+                        isDownloading = false;
+                        isCancellationRequested = false;
+                        $("#cancelDownloadBtn").hide();
+                        saveAs(content, zipFilename);
+                    });
+                    invIndex = paramList.length;
+                    return;
+                }
+
+                var e = paramList[invIndex].source || paramList[invIndex];
+
+                var blob = await DownloadFile(e.uuid, isPDF);
+                $(".downloadAllBtnText").html(`Downloading, ${count}/${totalCount}`);
+
+                var invoiceType = e.documentTypeNameAr || e.documentTypeNameSecondaryLang;
+                var invoiceDate = e.issueDate || e.dateTimeIssued;
+                var issuerId = e.submitterId || e.issuerId;
+                var issuerName = e.submitterName || e.issuerName;
+                var receiverId = e.recipientId || e.receiverId;
+                var receiverName = e.recipientName || e.receiverName;
+                var invoiceNumber = e.internalId.replaceAll('\\', '-').replaceAll('/', '-');
+                var fileName = "";
+
+                var options = getOptions();
+                if (options.date) fileName = concatString(fileName, getFormattedDate(new Date(invoiceDate)));
+
+                if (options.id) fileName = concatString(fileName, `(${invoiceNumber})`);
+
+                if (options.seller_id && options.seller_name) {
+                    fileName = concatString(fileName, `(${issuerId} ${issuerName})`);
+                } else {
+                    if (options.seller_id) fileName = concatString(fileName, issuerId);
+                    if (options.seller_name) fileName = concatString(fileName, issuerName);
+                }
+
+                if (options.buyer_id && options.buyer_name) {
+                    fileName = concatString(fileName, `(${receiverId} ${receiverName})`);
+                } else {
+                    if (options.buyer_id) fileName = concatString(fileName, receiverId);
+                    if (options.buyer_name) fileName = concatString(fileName, receiverName);
+                }
+
+                if (options.type) fileName = concatString(fileName, `(${invoiceType})`);
+
+                if (options.uuid) fileName = concatString(fileName, e.uuid);
+
+                if (fileName === undefined) fileName = pad(count + 1, 3)
+
+                fileName = fileName.replaceAll('\\', '-').replaceAll('/', '-');
+
+                if (options.separate_seller) fileName = `${issuerId} ${issuerName}/${fileName}`;
+                if (options.separate_buyer) fileName = `${receiverId} ${receiverName}/${fileName}`;
+
+                if ($.inArray(fileName, fileNameList) > -1) fileName = concatString(fileName, `(${e.uuid})`);
+
+                fileNameList.push(fileName);
+
+                if (isPDF) {
+                    zip.file(fileName.concat(".pdf"), blob, { binary: true });
+                } else {
+                    var blobJson = jsonToBlob(blob);
+                    var xml = '<document>' + OBJtoXML(blob) + '</document>'
+                    var blobXml = new Blob([xml], { type: 'application/xml' });
+                    zip.file(fileName.concat(".json"), blobJson);
+                    zip.file(fileName.concat(".xml"), blobXml);
+                }
+
+                count++;
+            }
+        }
+    } catch (e) {
+        console.log(e);
+    }
+}
+
+async function downloadExcelForReceipts(paramList) {
+    try {
+        $('#downloadModal').modal('hide');
+        var count = 0, totalCount = paramList.length;
+
+        if (totalCount > 0) {
+            var btn = $(".downloadAllBtn");
+            $(btn).addClass("disabled");
+            $("#cancelDownloadBtn").show();
+            var sortedList = [];
+
+            for (var invIndex = 0; invIndex <= paramList.length; invIndex++) {
+                if (isCancellationRequested || invIndex == paramList.length) {
+                    $(".downloadAllBtnText").html("Download All");
+                    $(btn).removeClass("disabled");
+
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet("جميع الإيصالات");
+
+                    worksheet.views = [
+                        { rightToLeft: true, rtl: true, activeCell: 'A1', state: "frozen", ySplit: 1 }
+                    ];
+
+                    var columns = [
+                        { header: 'مسلسل', key: 'index', width: 10 },
+                        { header: 'تفاصيل', key: 'details', width: 10, style: { font: { name: 'Comic Sans MS', family: 4, size: 12, underline: true, bold: true } } },
+                        { header: 'نوع الإيصال', key: 'type', width: 12 },
+                        { header: 'الحالة', key: 'status', width: 10 },
+                        { header: 'تاريخ الإصدار', key: 'dateTimeIssued', width: 13 },
+                        { header: 'تاريخ الإستلام', key: 'dateTimeReceived', width: 13 },
+                        { header: 'عملة الإيصال', key: 'currency', width: 13 },
+                        { header: 'قيمة الإيصال', key: 'netAmount', width: 12 },
+                        { header: 'إجمالى الإيصال', key: 'totalAmount', width: 14 },
+                        { header: 'رقم الإيصال', key: 'receiptNumber', width: 23 },
+                        { header: 'الرقم الإلكترونى', key: 'uuid', width: 32 },
+                        { header: 'سيريال نقطة البيع', key: 'deviceSerialNumber', width: 17 },
+                        { header: 'إسم نقطة البيع', key: 'submitterName', width: 17 },
+                        { header: 'الرقم الضريبى للبائع', key: 'issuerId', width: 17 },
+                        { header: 'إسم البائع', key: 'issuerName', width: 32 },
+                        { header: 'عنوان البائع', key: 'issuerAddress', width: 32 },
+                        { header: 'الرقم الضريبى للمشترى', key: 'receiverId', width: 17 },
+                        { header: 'إسم المشترى', key: 'receiverName', width: 32 },
+                        { header: 'رقم المشترى', key: 'receiverMobileNumber', width: 32 },
+                    ];
+                    var rows = [], detColumns = [], detRows = [], firstInvoiceLines = [];
+                    var detailsWorksheet, lineIndex = 1, lastLineIndex = 1;
+
+                    detColumns = [
+                        { header: 'كود الصنف', key: 'itemCode', width: 14 },
+                        { header: 'إسم الكود', key: 'itemCodeNameAr', width: 14 },
+                        { header: 'الوصف', key: 'description', width: 25 },
+                        { header: 'الكمية', key: 'quantity', width: 10 },
+                        { header: 'السعر', key: 'unitPrice', width: 10 },
+                        { header: 'القيمة', key: 'netSale', width: 10 },
+                        { header: 'الإجمالى', key: 'total', width: 10, totalsRowFunction: 'sum' },
+                    ];
+
+                    if (getOptions().combineAll) {
+                        detColumns = [
+                            { header: 'نوع الإيصال', key: 'type', width: 12 },
+                            { header: 'رقم الإيصال', key: 'receiptNumber', width: 23 },
+                            { header: 'تاريخ الإصدار', key: 'dateTimeIssued', width: 13 },
+                            { header: 'تاريخ الإستلام', key: 'dateTimeReceived', width: 13 },
+                            { header: 'كود الصنف', key: 'itemCode', width: 14 },
+                            { header: 'إسم الكود', key: 'itemCodeNameAr', width: 14 },
+                            { header: 'الوصف', key: 'description', width: 25 },
+                            { header: 'الكمية', key: 'quantity', width: 10 },
+                            { header: 'السعر', key: 'unitPrice', width: 10 },
+                            { header: 'القيمة', key: 'netSale', width: 10 },
+                            { header: 'الإجمالى', key: 'total', width: 10 },
+                            { header: 'سيريال نقطة البيع', key: 'deviceSerialNumber', width: 17 },
+                            { header: 'إسم نقطة البيع', key: 'submitterName', width: 17 },
+                            { header: 'الرقم الضريبى للبائع', key: 'issuerId', width: 17 },
+                            { header: 'إسم البائع', key: 'issuerName', width: 32 },
+                            { header: 'عنوان البائع', key: 'issuerAddress', width: 32 },
+                            { header: 'الرقم الضريبى للمشترى', key: 'receiverId', width: 17 },
+                            { header: 'إسم المشترى', key: 'receiverName', width: 32 },
+                            { header: 'رقم المشترى', key: 'receiverMobileNumber', width: 32 },
+                        ];
+                        detailsWorksheet = workbook.addWorksheet('بيانات الإيصالات');
+                    }
+
+                    $.each(sortedList, (i, masterReceipt) => {
+                        var doc = masterReceipt.docDetail;
+                        if (doc !== undefined) {
+                            var invCurrency = doc.currency;
+                            var issuerAddress = doc.seller.branchAddress ?? [];
+                            var buyerAddress = doc.buyer.branchAddress ?? [];
+
+                            var row = {
+                                index: i + 1,
+                                type: doc.documentType.receiptTypeNameAr,
+                                status: doc.status,
+                                dateTimeIssued: new Date(doc.dateTimeIssued),
+                                dateTimeReceived: new Date(doc.dateTimeReceived),
+                                currency: invCurrency,
+                                receiptNumber: doc.receiptNumber,
+                                netAmount: doc.totalSales,
+                                totalAmount: doc.totalAmount,
+                                uuid: doc.uuid,
+                                deviceSerialNumber: masterReceipt.posSerialNumber,
+                                submitterName: masterReceipt.submitterName,
+                                issuerId: doc.seller.sellerId,
+                                issuerName: doc.seller.sellerName,
+                                issuerAddress: `${issuerAddress.buildingNumber} ${issuerAddress.street} ${issuerAddress.regionCity} ${issuerAddress.governate}`,
+                                receiverId: doc.buyer.buyerId,
+                                receiverName: doc.buyer.buyerName,
+                                receiverMobileNumber: doc.buyer.mobileNumber,
+                            };
+
+                            $.each(doc.taxTotals, (t, tax) => {
+                                if (getColumnIndex(columns, tax.taxType) == -1) {
+                                    var newTax = getTaxTypeDescription(tax.taxType);
+                                    columns.splice(getColumnIndex(columns, "totalAmount"), 0, { header: newTax.description, key: tax.taxType, width: newTax.width });
+                                }
+                                row[tax.taxType] = tax.amount;
+                            });
+
+                            if (doc.totalItemsDiscount && doc.totalItemsDiscount > 0) {
+                                if (getColumnIndex(columns, "itemsDiscount") == -1) {
+                                    columns.splice(getColumnIndex(columns, "totalAmount"), 0, { header: "خصم الأصناف", key: "itemsDiscount", width: 13 });
+                                }
+                                row["itemsDiscount"] = doc.totalItemsDiscount;
+                            }
+
+                            if (doc.totalCommercialDiscount && doc.totalCommercialDiscount > 0) {
+                                if (getColumnIndex(columns, "commercialDiscount") == -1) {
+                                    columns.splice(getColumnIndex(columns, "totalAmount"), 0, { header: "خصم", key: "commercialDiscount", width: 13 });
+                                }
+                                row["commercialDiscount"] = doc.totalCommercialDiscount;
+                            }
+
+                            var indx = i + 1;
+
+                            if (!getOptions().combineAll) {
+                                detRows = [];
+                                detailsWorksheet = workbook.addWorksheet(`${indx}`);
+                            }
+
+                            detailsWorksheet.views = [
+                                { rightToLeft: true, rtl: true, activeCell: 'A1', state: "frozen", ySplit: 1 }
+                            ];
+
+                            lastLineIndex = lineIndex + 1;
+                            firstInvoiceLines.push(lastLineIndex);
+                            $.each(doc.itemData, (l, line) => {
+                                lineIndex += 1;
+
+                                var detRow = {
+                                    type: doc.documentType.receiptTypeNameAr,
+                                    receiptNumber: doc.receiptNumber,
+                                    dateTimeIssued: new Date(doc.dateTimeIssued),
+                                    dateTimeReceived: new Date(doc.dateTimeReceived),
+                                    itemCode: line.itemCode,
+                                    itemCodeNameAr: line.itemCodeNameAr,
+                                    description: line.description,
+                                    quantity: line.quantity,
+                                    unitPrice: line.unitPrice,
+                                    netSale: line.netSale,
+                                    total: line.total,
+                                    deviceSerialNumber: masterReceipt.posSerialNumber,
+                                    submitterName: masterReceipt.submitterName,
+                                    issuerId: doc.seller.sellerId,
+                                    issuerName: doc.seller.sellerName,
+                                    issuerAddress: `${issuerAddress.buildingNumber} ${issuerAddress.street} ${issuerAddress.regionCity} ${issuerAddress.governate}`,
+                                    receiverId: doc.buyer.buyerId,
+                                    receiverName: doc.buyer.buyerName,
+                                    receiverMobileNumber: doc.buyer.mobileNumber,
+                                };
+
+                                $.each(line.taxableItems, (t, tax) => {
+                                    if (getColumnIndex(detColumns, tax.taxType) == -1) {
+                                        var newTax = getTaxTypeDescription(tax.taxType);
+                                        detColumns.splice(getColumnIndex(detColumns, "total"), 0, { header: newTax.description, key: tax.taxType, width: newTax.width });
+                                    }
+                                    detRow[tax.taxType] = tax.amount;
+                                });
+
+                                if (line.valueDifference && line.valueDifference > 0) {
+                                    if (getColumnIndex(detColumns, "valueDifference") == -1) {
+                                        detColumns.splice(getColumnIndex(detColumns, "total"), 0, { header: "فرق قيمة لأغراض الضريبة", key: "valueDifference", width: 20 });
+                                    }
+                                    detRow["valueDifference"] = line.valueDifference;
+                                }
+
+                                detRows.push(detRow);
+
+                                if (l == doc.itemData.length - 1) {
+                                    if (!getOptions().combineAll) {
+                                        detailsWorksheet.columns = detColumns;
+                                        detailsWorksheet.addRows(detRows);
+                                        detailsWorksheet.addRow({ itemCode: { text: 'عودة', hyperlink: `#\'جميع الإيصالات\'!B${indx + 1}` } })
+                                        detailsWorksheet.getCell(`A${doc.itemData.length + 2}`).font = { name: 'Calibri', size: 14, underline: true, bold: true };
+                                    }
+                                }
+                            });
+                            if (getOptions().combineAll) {
+                                row.details = { text: 'عرض', hyperlink: `#\'بيانات الإيصالات\'!A${lastLineIndex}` };
+                            } else {
+                                row.details = { text: 'عرض', hyperlink: `#\'${indx}\'!A1` };
+                            }
+
+                            rows.push(row);
+                        }
+                    });
+
+                    worksheet.columns = columns;
+                    worksheet.addRows(rows);
+
+                    if (getOptions().combineAll) {
+                        detailsWorksheet.columns = detColumns;
+                        detailsWorksheet.addRows(detRows);
+                        $.each(firstInvoiceLines, (i, l) => {
+                            detailsWorksheet.getCell(`A${l}`).font = { name: 'Calibri', size: 11, underline: true, bold: true };
+                        })
+                    }
+
+                    worksheet.getCell('B1').font = { name: 'Calibri', size: 11, underline: false, bold: false };
+
+                    worksheet.autoFilter = {
+                        from: 'A1',
+                        to: {
+                            row: rows.length + 1,
+                            column: columns.length - 1
+                        }
+                    }
+                    detailsWorksheet.autoFilter = {
+                        from: 'A1',
+                        to: {
+                            row: detRows.length + 1,
+                            column: detColumns.length - 1
+                        }
+                    }
+                    workbook.xlsx.writeBuffer().then(function (data) {
+                        var xlBlob = new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                        saveAs(xlBlob, "eReceipts.xlsx");
+                        isDownloading = false;
+                        isCancellationRequested = false;
+                        $("#cancelDownloadBtn").hide();
+                    });
+                    invIndex = paramList.length;
+                    return;
+                }
+                var e = paramList[invIndex].receipt || paramList[invIndex];
+                var inv = await getDocumentDetails(e.uuid, "receipts");
+
+                $(".downloadAllBtnText").html(`Preparing Row(${count}/${totalCount})`);
+                count++;
+                if (inv !== undefined) {
+                    e.docDetail = inv.receipt;
+                    sortedList.push(e);
+                }
+            }
+        }
+    } catch (e) {
+        console.log(e);
+    }
+}
+
+async function downloadExcelForReceiptsNoDetails(paramList) {
+    try {
+        $('#downloadModal').modal('hide');
+        var count = 0, totalCount = paramList.length;
+
+        if (totalCount > 0) {
+            var btn = $(".downloadAllBtn");
+            $(btn).addClass("disabled");
+            $("#cancelDownloadBtn").show();
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet("جميع الإيصالات");
+
+            worksheet.views = [
+                { rightToLeft: true, rtl: true, activeCell: 'A1', state: "frozen", ySplit: 1 }
+            ];
+            var rows = [];
+            for (var invIndex = 0; invIndex <= totalCount; invIndex++) {
+                var doc = paramList[invIndex];
+                if (doc != undefined) {
+                    $(btn).removeClass("disabled");
+                    var columns = [
+                        { header: 'مسلسل', key: 'index', width: 10 },
+                        { header: 'نوع الإيصال', key: 'type', width: 12 },
+                        { header: 'الحالة', key: 'status', width: 10 },
+                        { header: 'تاريخ الإصدار', key: 'dateTimeIssued', width: 13 },
+                        { header: 'تاريخ الإستلام', key: 'dateTimeReceived', width: 13 },
+                        { header: 'عملة الإيصال', key: 'currency', width: 13 },
+                        { header: 'إجمالى الإيصال', key: 'totalAmount', width: 14 },
+                        { header: 'رقم الإيصال', key: 'receiptNumber', width: 23 },
+                        { header: 'الرقم الإلكترونى', key: 'uuid', width: 32 },
+                        { header: 'سيريال نقطة البيع', key: 'deviceSerialNumber', width: 17 },
+                        { header: 'إسم نقطة البيع', key: 'submitterName', width: 17 },
+                        { header: 'الرقم الضريبى للبائع', key: 'issuerId', width: 17 },
+                        { header: 'إسم البائع', key: 'issuerName', width: 32 },
+                        { header: 'الرقم الضريبى للمشترى', key: 'receiverId', width: 17 },
+                        { header: 'إسم المشترى', key: 'receiverName', width: 32 },
+                    ];
+
+                    var row = {
+                        index: invIndex + 1,
+                        type: doc.documentTypeNameSecondaryLang,
+                        status: doc.status,
+                        dateTimeIssued: new Date(doc.dateTimeIssued),
+                        dateTimeReceived: new Date(doc.dateTimeReceived),
+                        currency: doc.currency,
+                        receiptNumber: doc.receiptNumber,
+                        netAmount: doc.totalSales,
+                        totalAmount: doc.totalAmount,
+                        uuid: doc.uuid,
+                        deviceSerialNumber: doc.posSerialNumber,
+                        submitterName: doc.submitterName,
+                        issuerId: doc.issuerId,
+                        issuerName: doc.issuerName,
+                        receiverId: doc.receiverId,
+                        receiverName: doc.receiverName,
+                    };
+                    rows.push(row);
+                }
+                if (invIndex == totalCount) {
+                    worksheet.columns = columns;
+                    worksheet.addRows(rows);
+                    worksheet.autoFilter = {
+                        from: 'A1',
+                        to: {
+                            row: rows.length + 1,
+                            column: columns.length - 1
+                        }
+                    }
+                    workbook.xlsx.writeBuffer().then(function (data) {
+                        var xlBlob = new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                        saveAs(xlBlob, "eReceipts.xlsx");
+                        isDownloading = false;
+                        isCancellationRequested = false;
+                        $("#cancelDownloadBtn").hide();
+                        $(".downloadAllBtnText").html("Download All");
+                    });
+                }
+            }
+            $(".downloadAllBtnText").html(`Please Wait...`);
+        }
+    } catch (ex) {
+        console.log(ex);
+    }
+}
+
+async function downloadJsonForReceipts(paramList) {
+    try {
+        $('#downloadModal').modal('hide');
+        var count = 0, totalCount = paramList.length;
+
+        if (totalCount > 0) {
+            var zip = new JSZip();
+            var zipFilename = "eReceipts.zip";
+            var btn = $(".downloadAllBtn");
+            $(btn).addClass("disabled");
+            $("#cancelDownloadBtn").show();
+
+            for (var invIndex = 0; invIndex <= paramList.length; invIndex++) {
+                if (isCancellationRequested || invIndex == paramList.length) {
+                    zip.generateAsync({ type: 'blob' }).then(function (content) {
+                        $(".downloadAllBtnText").html("Download All");
+                        $(btn).removeClass("disabled");
+                        isDownloading = false;
+                        isCancellationRequested = false;
+                        $("#cancelDownloadBtn").hide();
+                        saveAs(content, zipFilename);
+                    });
+                    invIndex = paramList.length;
+                    return;
+                }
+
+                var e = paramList[invIndex].receipt || paramList[invIndex];
+                var blob = await DownloadFile(e.uuid, false, "receipts");
+                $(".downloadAllBtnText").html(`Downloading, ${count}/${totalCount}`);
+                var fileName = e.uuid.replaceAll(' ', '');
+                var blobJson = jsonToBlob(blob);
+                var xml = '<document>' + OBJtoXML(blob) + '</document>'
+                var blobXml = new Blob([xml], { type: 'application/xml' });
+                zip.file(fileName.concat(".json"), blobJson);
+                zip.file(fileName.concat(".xml"), blobXml);
+                count++;
+            }
+        }
+    } catch (e) {
+        console.log(e);
+    }
+}
+
+async function downloadAllPages() {
+    if (responseTotalCount > 0) {
+        var totalPages = Math.ceil(responseTotalCount / 100);
+        var deferred = new $.Deferred();
+        $('#downloadModal').modal('hide');
+        var btn = $(".downloadAllBtn");
+        $(btn).addClass("disabled");
+        isDownloading = true;
+        var tempList = [];
+        var lastSubmission;
+        var index = 0;
+        var url = replaceUrlParam(currentUrl, "PageSize", 100);
+        try {
+            $(".downloadAllBtnText").html(`Loading Page(1/${totalPages})`);
+            for (var i = 1; i <= totalPages; i++) {
+                //Bypass the max limit of 5000 record.
+                if (i % 50 === 0 || index >= 50) {
+                    index = 1;
+                    url = replaceUrlParam(url, "SubmissionDateTo", lastSubmission);
+                } else {
+                    index++;
+                }
+
+                url = replaceUrlParam(url, "PageNo", index);
+                url = replaceUrlParam(url, "Page", index);
+
+                await getInvoiceList(url).then((data) => {
+                    if (data == null) {
+                        i = totalPages;
+                        deferred.resolve(tempList);
+                    }
+                    else {
+                        lastSubmission = data.result.length ?
+                            data.result[data.result.length - 1].source ? data.result[data.result.length - 1].source.submissionDate : data.result[data.result.length - 1].dateTimeReceived
+                            : lastSubmission;
+                        tempList = mergeArray(tempList, data.result || [], (a, b) => b.uuid ? a.uuid === b.uuid : a.source.uuid === b.source.uuid);
+
+                        $(".downloadAllBtnText").html(`Loading Page(${i}/${totalPages})`);
+                        if (i == totalPages) {
+                            if (tempList.length <= responseTotalCount) {
+                                var diff = totalPages - Math.ceil(tempList.length / 100);
+                                if (diff == 0 && tempList.length == responseTotalCount) {
+                                    deferred.resolve(tempList);
+                                } else {
+                                    i = totalPages - diff - 1;
+                                }
+                            } else {
+                                if (tempList.length > responseTotalCount) {
+                                    tempList = tempList.slice(0, responseTotalCount);
+                                }
+                                deferred.resolve(tempList);
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            deferred.resolve(tempList);
+        }
+
+        return deferred.promise();
+    }
+}
+
+async function downloadAllReceiptPages() {
+    if (responseTotalCount > 0) {
+        var totalPages = Math.ceil(responseTotalCount / 100);
+        var deferred = new $.Deferred();
+        $('#downloadModal').modal('hide');
+        var btn = $(".downloadAllBtn");
+        $(btn).addClass("disabled");
+        isDownloading = true;
+        var tempList = [];
+        var lastIssueDate;
+        var index = 0;
+        var url = replaceUrlParam(currentUrl, "PageSize", 100);
+        url = replaceUrlParam(url, "SortBy", "DateTimeIssued");
+        url = replaceUrlParam(url, "SortDir", "Desc");
+        try {
+            $(".downloadAllBtnText").html(`Loading Page(1/${totalPages})`);
+            for (var i = 1; i <= totalPages; i++) {
+                //Bypass the max limit of 3000 record.
+                if (i % 30 === 0 || index >= 30) {
+                    index = 1;
+                    url = replaceUrlParam(url, "DateTimeIssuedTo", lastIssueDate);
+                } else {
+                    index++;
+                }
+
+                url = replaceUrlParam(url, "PageNo", index);
+                url = replaceUrlParam(url, "Page", index);
+
+                await getInvoiceList(url).then((data) => {
+                    if (data == null) {
+                        i = totalPages;
+                        deferred.resolve(tempList);
+                    }
+                    else {
+                        var records = data.receipts || data.result;
+
+                        lastIssueDate = records.length ? records[records.length - 1].dateTimeIssued : lastIssueDate;
+                        tempList = mergeArray(tempList, records || [], (a, b) => a.uuid === b.uuid && a.submissionUuid === b.submissionUuid);
+
+                        $(".downloadAllBtnText").html(`Loading Page(${i}/${totalPages})`);
+                        if (i == totalPages) {
+                            if (tempList.length + 99 < responseTotalCount) {
+                                var diff = totalPages - Math.ceil(tempList.length / 100);
+                                i = totalPages - diff;
+                            } else {
+                                deferred.resolve(tempList);
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            deferred.resolve(tempList);
+        }
+        
+        return deferred.promise();
+    }
+}
+
+async function getInvoiceList(url) {
+    var result;
+    try {
+        await $.ajax({
+            url: url,
+            method: "GET",
+            cache: false,
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer ".concat(JSON.parse(localStorage.USER_DATA).access_token),
+                "Accept-Language": localStorage.i18nextLng || "ar"
+            },
+            xhr: function () {
+                var xhr = new XMLHttpRequest();
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState == 2) {
+                        if (xhr.status == 200) {
+                            xhr.responseType = "text";
+                        }
+                    }
+                };
+                return xhr;
+            },
+            success: function (data) {
+                result = data;
+                return result;
+            }
+        });
+        return result;
+    } catch (ex) {
+        console.log(ex);
+        return null;
+    }
+}
+
+async function downloadAllCodes() {
+    if (responseTotalCount > 0) {
+        const totalPages = Math.ceil(responseTotalCount / 100);
+        var deferred = new $.Deferred();
+        var btn = $(".downloadAllBtn");
+        $(btn).addClass("disabled");
+        isDownloading = true;
+
+        var tempList = [];
+        $(".downloadAllBtnText").html(`Loading Page(1/${totalPages})`);
+        for (var i = 1; i <= totalPages; i++) {
+            var url = replaceUrlParam(currentUrl, "Ps", 100);
+            url = replaceUrlParam(url, "Pn", i);
+            await getInvoiceList(url).then((data) => {
+                tempList = $.merge($.merge([], tempList), data.result);
+                $(".downloadAllBtnText").html(`Loading Page(${i}/${totalPages})`);
+                if (i == totalPages) {
+                    deferred.resolve(tempList);
+                }
+            });
+        }
+        return deferred.promise();
+    }
+}
+
+async function DownloadFile(fileName, isPDF, dir = "documents") {
+    var type = isPDF ? "pdf" : "raw";
+    try {
+        var url = `https://api-portal.invoicing.eta.gov.eg/api/v1/${dir}/${fileName}/${type}`;
+        var blob;
+        await $.ajax({
+            url: url,
+            method: "GET",
+            cache: false,
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer ".concat(JSON.parse(localStorage.USER_DATA).access_token),
+                "Accept-Language": localStorage.i18nextLng || "ar"
+            },
+            xhr: function () {
+                var xhr = new XMLHttpRequest();
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState == 2) {
+                        if (xhr.status == 200) {
+                            xhr.responseType = isPDF ? "blob" : "text";
+                        } else {
+                            xhr.responseType = "text";
+                        }
+                    }
+                };
+                return xhr;
+            },
+            success: function (data) {
+                if (isPDF) {
+                    blob = new Blob([data], { type: 'application/pdf' });
+                } else {
+                    blob = data;
+                }
+                return blob;
+            }
+        });
+        return blob;
+    } catch (e) {
+        console.log(e);
+    }
+};
+
+async function getDocumentDetails(uuid, dir = "documents", retries = 0) {
+    try {
+        var url = `https://api-portal.invoicing.eta.gov.eg/api/v1/${dir}/${uuid}/details?documentLinesLimit=1000`;
+        var result;
+        await $.ajax({
+            url: url,
+            method: "GET",
+            cache: false,
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer ".concat(JSON.parse(localStorage.USER_DATA).access_token),
+                "Accept-Language": localStorage.i18nextLng || "ar"
+            },
+            xhr: function () {
+                var xhr = new XMLHttpRequest();
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState == 2) {
+                        if (xhr.status == 200) {
+                            xhr.responseType = "text";
+                        }
+                    }
+                };
+                return xhr;
+            },
+            success: function (data) {
+                result = data;
+                return result;
+            }
+        });
+        return result;
+    } catch (e) {
+        console.log(e);
+        retries++;
+        if (retries < 3)
+            return await getDocumentDetails(uuid, dir, retries);
+    }
+};
+
+function getFormattedDate(d) {
+    var curr_date = pad(d.getDate(), 2);
+    var curr_month = pad(d.getMonth() + 1, 2);
+    var curr_year = d.getFullYear();
+    return `${curr_year}-${curr_month}-${curr_date}`;
+}
+function concatString(str, val) {
+    if (str) return str + " - " + val;
+    else return val;
+}
+function pad(str, max) {
+    str = str.toString();
+    return str.length < max ? pad("0" + str, max) : str;
+}
+function getColumnIndex(array, header) {
+    return array.indexOf(array.filter(function (item) { return item.key == header })[0]);
+}
+function getTaxTypeDescription(code) {
+    var types = [
+        { code: "T1", description: "ضريبة القيمة المضافة", width: 18 },
+        { code: "T2", description: "ضريبة الجدول النسبية", width: 18 },
+        { code: "T3", description: "ضريبة الجدول النوعية", width: 18 },
+        { code: "T4", description: "الخصم تحت حساب الضريبة", width: 22 },
+        { code: "T5", description: "ضريبة الدمغة النسبية", width: 22 },
+        { code: "T13", description: "ضريبة الدمغة النسبية", width: 22 },
+        { code: "T6", description: "ضريبة الدمغة قطعية بمقدار ثابت", width: 30 },
+        { code: "T14", description: "ضريبة الدمغة قطعية بمقدار ثابت", width: 30 },
+        { code: "T7", description: "ضريبة الملاهى", width: 14 },
+        { code: "T15", description: "ضريبة الملاهى", width: 14 },
+        { code: "T8", description: "رسم تنمية الموارد", width: 18 },
+        { code: "T16", description: "رسم تنمية الموارد", width: 18 },
+        { code: "T9", description: "رسم خدمة", width: 12 },
+        { code: "T17", description: "رسم خدمة", width: 12 },
+        { code: "T10", description: "رسم المحليات", width: 14 },
+        { code: "T18", description: "رسم المحليات", width: 14 },
+        { code: "T11", description: "رسم التامين الصحى", width: 18 },
+        { code: "T19", description: "رسم التامين الصحى", width: 18 },
+        { code: "T12", description: "رسوم أخرى", width: 12 },
+        { code: "T20", description: "رسوم أخرى", width: 12 },
+    ];
+
+    return types.filter(x => x.code === code)[0];
+}
+function replaceUrlParam(url, paramName, paramValue) {
+    if (paramValue == null) {
+        paramValue = '';
+    }
+    var pattern = new RegExp('\\b(' + paramName + '=).*?(&|#|$)');
+    if (url.search(pattern) >= 0) {
+        return url.replace(pattern, '$1' + paramValue + '$2');
+    }
+    url = url.replace(/[?#]$/, '');
+    return url + (url.indexOf('?') > 0 ? '&' : '?') + paramName + '=' + paramValue;
+}
+function jsonToBlob(json) {
+    const textEncoder = new TextEncoder();
+    const seen = new WeakSet();
+
+    function processValue(value) {
+        if (seen.has(value)) {
+            throw new TypeError("Converting circular structure to JSON");
+        }
+
+        if (value && typeof value.toJSON === "function") {
+            value = value.toJSON();
+        }
+
+        if (typeof value === 'object' && value !== null) {
+            seen.add(value);
+
+            const blobParts = [];
+            const entries = Array.isArray(value) ? value : Object.entries(value);
+            for (let i = 0; i < entries.length; i++) {
+                if (Array.isArray(value)) {
+                    blobParts.push(processValue(entries[i]));
+                } else {
+                    const [key, val] = entries[i];
+                    blobParts.push(textEncoder.encode(JSON.stringify(key) + ':'), processValue(val));
+                }
+                if (i !== entries.length - 1) blobParts.push(textEncoder.encode(','));
+            }
+
+            const startBracket = Array.isArray(value) ? '[' : '{';
+            const endBracket = Array.isArray(value) ? ']' : '}';
+            return new Blob([textEncoder.encode(startBracket), ...blobParts, textEncoder.encode(endBracket)]);
+        } else if (typeof value === 'function' || typeof value === 'undefined') {
+            return textEncoder.encode("null");
+        } else {
+            return textEncoder.encode(JSON.stringify(value));
+        }
+    }
+
+    return processValue(json);
+}
+function OBJtoXML(obj) {
+    var xml = '';
+    for (var prop in obj) {
+        xml += obj[prop] instanceof Array ? '' : "<" + prop + ">";
+        if (obj[prop] instanceof Array) {
+            for (var array in obj[prop]) {
+                xml += "<" + prop + ">";
+                xml += OBJtoXML(new Object(obj[prop][array]));
+                xml += "</" + prop + ">";
+            }
+        } else if (typeof obj[prop] == "object" && prop !== "document") {
+            var n = OBJtoXML(new Object(obj[prop]));
+            xml += n;
+        } else {
+            xml += obj[prop];
+        }
+        xml += obj[prop] instanceof Array ? '' : "</" + prop + ">";
+    }
+    var xml = xml.replace(/<\/?[0-9]{1,}>/g, '');
+    return xml
+}
+const mergeArray = (a, b, predicate = (a, b) => a === b) => {
+    const c = [...a];
+    b.forEach((bItem) => (c.some((cItem) => predicate(bItem, cItem)) ? null : c.push(bItem)))
+    return c;
+}
